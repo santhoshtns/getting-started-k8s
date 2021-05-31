@@ -1,0 +1,13 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: tns-pod
+  labels:
+    app: web
+spec:
+  containers:
+  - name: main-ctr
+    image: santhoshtns/getting-started-k8s:1.0
+    imagePullPolicy: Always
+    ports:
+      - containerPort: 8080
