@@ -1,0 +1,155 @@
+# IMPORTANT: PersistentVolumes and MongoDB have problems on Windows. 
+# The YAML is being shown here for completeness (for Windows/Mac/Linux), but there's a known issue
+# with Windows, Docker Desktop, and Kubernetes.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: mongo-env
+  name: mongo-env
+data:
+  MONGODB_DBNAME: codeWithDan
+  #NO - not a good idea to store a password in a ConfigMap (demo only). See the "secrets" folder for another demo of this.
+  MONGODB_PASSWORD: password 
+  MONGODB_ROLE: readWrite
+  #NO - not a good idea to store a password in a ConfigMap (demo only). See the "secrets" folder for another demo of this.
+  MONGODB_ROOT_PASSWORD: password
+  MONGODB_ROOT_ROLE: root
+  MONGODB_ROOT_USERNAME: dbadmin
+  MONGODB_USERNAME: webrole
+
+---
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: retain
+volumeBindingMode: WaitForFirstCustomer
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: FileSystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  local:
+    path: /tmp/data/db
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - docker-desktop
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-storage
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+spec:
+  selector:
+    app: mongo
+  ports:
+  - port: 27017
+    targetPort: 27017
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  labels:
+    app: mango
+spec:
+  selector:
+    matchLabels:
+      app: mongo
+  serviceName: mongo
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo
+          ports:
+          - containerPort: 27017
+          command:
+          - mongod
+          - "--auth"
+          resources: {}          
+          volumeMounts:
+          - name: mongo-volume
+            mountPath: /data/db
+          env:
+            - name: MONDODB_DBNAME
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_DBNAME
+                  name: mongo-env
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_PASSWORD
+                  name: mongo-env
+            - name: MONGODB_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_ROLE
+                  name: mongo-env
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_ROOT_PASSWORD
+                  name: mongo-env
+            - name: MONGODB_ROOT_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_ROOT_ROLE
+                  name: mongo-env
+            - name: MONGODB_ROOT_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_ROOT_USERNAME
+                  name: mongo-env
+            - name: MONDODB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  key: MONGODB_USERNAME
+                  name: mongo-env
+      volumes:
+      - name: mongo-volume
+        persistentVolumeClaim:
+          claimName: mongo-pvc
+          
